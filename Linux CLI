@@ -1,0 +1,190 @@
+I have added comments to better explain the steps.
+I found that following this document was not sufficient: Create & install P2S VPN client configuration files: certificate authentication - Azure VPN Gateway | Microsoft Docs
+
+kindly ignore if this is not new to you.
+
+
+On Ubuntu 18.04
+
+Start by preparing StrongSwan.
+StrongSwan provides us with the IPSec tools required on the Linux client. 
+ 
+Run these to install StrongSwan dependencies:
+$sudo apt install strongswan
+$sudo apt install strongswan-pki
+$sudo apt-get install strongswan libcharon-extra-plugins strongswan-pki -y
+
+Install Azure CLI on linux. To be honest, I do not know why this is needed but I have not tried not using it
+$curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+Generate Root certificate
+$ipsec pki --gen --outform pem > cert01.pem
+$ipsec pki --self --in cert01.pem --dn "CN=VPN CA" --ca --outform pem > Mainroot.pem
+
+Print out (echo) the certificate so you could copy its cert data to AzureP2S config
+$openssl x509 -in Mainroot.pem -outform der | base64 -w0 ; echo
+
+Now, unto client certificates
+$export PASSWORD="febreeze" #you can input your own password in the quotes. 
+$export USERNAME="rexona" #you can input your own CN in the quotes. 
+ 
+$ipsec pki --gen --outform pem > "${USERNAME}Key.pem"
+$ipsec pki --pub --in "${USERNAME}Key.pem" | ipsec pki --issue --cacert Mainroot.pem --cakey cert01.pem --dn "CN=${USERNAME}" --san "${USERNAME}" --flag clientAuth --outform pem > "${USERNAME}Cert.pem"
+
+Generate p12 bundle of client cert
+$openssl pkcs12 -in "${USERNAME}Cert.pem" -inkey "${USERNAME}Key.pem" -certfile Mainroot.pem -export -out "${USERNAME}.p12" -password "pass:${PASSWORD}"
+
+Download the VPN client package on the P2S config page on the Azure Portal.
+
+Extract the file to reveal the generic folder.
+What I did was move the file to the linux box using SCP because my Linux does not have a GUI. 
+I have been accessing Azure Portal using a local PC.
+I needed to move the file from the local PC to the linux VM after I had extracted it:
+first, on the local PC, I CD'd into the directory and folder where I have extracted the files then
+$scp Generic\VpnServerRoot.cer Villa@10.20.30.40:        #syntax is scp <folder to be copied on local PC> <username@linuxVmIP:folderonlinux>
+It will prompt you for password of LinuxVM
+
+Rename from 'Generic\VpnServerRoot.cer' to VpnServerRoot.cer
+$sudo mv 'Generic\VpnServerRoot.cer' VpnServerRoot.cer
+
+Copy the VpnServerRoot.cer to /etc/ipsec.d/cacerts
+$sudo cp VpnServerRoot.cer /etc/ipsec.d/cacerts
+
+Copy cp client.p12 to /etc/ipsec.d/private/. 
+This file is the client certificate for the VPN gateway and you might have given it a different name earlier if you are like me.
+$sudo cp rexona.p12 /etc/ipsec.d/private/
+
+Open the VpnSettings.xml file and copy the <VpnServer> value. You will use this value in the next step.
+The value usually ends with ‘azure.vpn.com’ 
+for me, it was 'azuregateway-3c3c0065-2af1-42eb-ae44-eda4c545c417-27167520a0e7.vpn.azure.com'
+
+First I copied the Generic\VpnSettings.xml down to my linux
+$scp Generic\VpnSettings.xml Villa@10.20.30.40:  
+ 
+I renamed
+$sudo mv 'Generic\VpnSettings.xml' VpnSettings.xml
+
+Then I opened to view content
+$sudo nano VpnSettings.xml
+
+Make the content of /etc/ipsec.conf configuration look like below:
+
+conn azure
+      keyexchange=ikev2
+      type=tunnel
+      leftfirewall=yes
+      left=%any
+      leftauth=eap-tls
+      leftid=%rexona
+      right=azuregateway-3c3c0065-2af1-42eb-ae44-eda4c545c417-27167520a0e7.vpn.azure.com #use yours. This could be gotten from the step above
+      rightid=%azuregateway-3c3c0065-2af1-42eb-ae44-eda4c545c417-27167520a0e7.vpn.azure.com #should match the value in the line above
+      rightsubnet=0.0.0.0/0
+      leftsourceip=%config
+      auto=add
+
+Run below command to open /etc/ipsec.conf
+$sudo nano /etc/ipsec.conf 
+ 
+Add the following values to /etc/ipsec.secrets:
+Open path
+$sudo nano /etc/ipsec.secrets 
+Add text below starting from colon: 
+: P12 rexona.p12 'febreeze' # key filename inside /etc/ipsec.d/private directory
+
+Restart StrongSwan IPSec tunnel
+$sudo ipsec restart
+
+Connect
+$sudo ipsec up azure
+
+
+
+
+Slight but crucial difference on Ubuntu 20.04 
+
+Below is the config for 20.04 version of Ubuntu by Canonical.
+
+Start by preparing StrongSwan.
+StrongSwan provides us with the IPSec tools required on the Linux client. 
+
+Update & upgrade
+
+$sudo apt update
+$sudo apt upgrade
+
+Run these to install StrongSwan dependencies: two lines as against 3 for 18.04
+$sudo apt install strongswan
+$sudo apt install strongswan strongswan-pki libcharon-extra-plugins libcharon-extauth-plugins libstrongswan-extra-plugins  #totally different
+
+Install Azure CLI on linux. 
+$curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+Generate Root certificate
+$ipsec pki --gen --type rsa --size 4096--outform pem > cert01.pem #specifying size is a must as the default is 2048 which would not work on this version 
+$ipsec pki --self --in cert01.pem --dn "CN=VPN CA" --ca --outform pem > Mainroot.pem
+
+Print out (echo) the certificate so you could copy its cert data to AzureP2S config
+$openssl x509 -in Mainroot.pem -outform der | base64 -w0 ; echo
+
+Now, unto client certificates
+$export PASSWORD="febreeze" #you can input your own password in the quotes. 
+$export USERNAME="rexona" #you can input your own CN in the quotes. 
+
+$ipsec pki --gen --outform pem > "${USERNAME}Key.pem"
+$ipsec pki --pub --in "${USERNAME}Key.pem" | ipsec pki --issue --cacert Mainroot.pem --cakey cert01.pem --dn "CN=${USERNAME}" --san "${USERNAME}" --flag clientAuth --outform pem > "${USERNAME}Cert.pem"
+
+Generate p12 bundle of client cert
+$openssl pkcs12 -in "${USERNAME}Cert.pem" -inkey "${USERNAME}Key.pem" -certfile Mainroot.pem -export -out "${USERNAME}.p12" -password "pass:${PASSWORD}"
+
+Download the VPN client package on the P2S config page on the Azure Portal.
+
+Extract the file to reveal the generic folder
+$sudo scp Generic\VpnServerRoot.cer  Villa@12.34.56.78:
+$sudo scp Generic\VpnSettings.xml Villa@12.34.56.78:
+
+Rename these files:
+$mv ‘Generic\VpnServerRoot.cer’ VpnServerRoot.cer
+$mv ‘Generic\VpnSettings.xml’ VpnSettings.xml
+
+From the Generic folder, copy or move the VpnServerRoot.cer to /etc/ipsec.d/cacerts
+$sudo cp VpnServerRoot.cer /etc/ipsec.d/cacerts
+
+Copy cp client.p12 to /etc/ipsec.d/private/. This file is the client certificate for the VPN gateway and you might have given it a different name earlier.
+$sudo cp rexona.p12 /etc/ipsec.d/private/
+
+Open the VpnSettings.xml file and copy the <VpnServer> value. You will use this value in the next step.
+The value usually ends with ‘azure.vPN.com’
+$sudo nano VpnSettings.xml
+
+Make the content of /etc/ipsec.conf configuration look like below:
+
+conn azure
+      keyexchange=ikev2
+      type=tunnel
+      leftfirewall=yes
+      left=%any
+      leftauth=eap-tls
+      leftid=%rexona
+      right=azuregateway-xxxxx-xxxxxx-xxxxxxx-xxxxxx.vpn.azure.com
+      rightid=%azuregateway-xxxxx-xxxxxx-xxxxxxx-xxxxxx.vpn.azure.com
+      rightsubnet=0.0.0.0/0
+      leftsourceip=%config
+      auto=add
+
+Run below command to open /etc/ipsec.conf
+$sudo nano /etc/ipsec.conf 
+
+Add the following values to /etc/ipsec.secrets:
+Open path
+$sudo nano /etc/ipsec.secrets 
+: P12 rexona.p12 ‘febreeze’ # key filename inside /etc/ipsec.d/private directory #double quotes work for the password on local PCs and single quotes on Azure VMs
+
+Restart StrongSwan IPSec tunnel
+$sudo ipsec restart
+
+Connect
+$sudo ipsec up azure
+
+Voila!
+
+If you have questions/contributions, please ask/share.
