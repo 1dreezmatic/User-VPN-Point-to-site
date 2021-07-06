@@ -21,6 +21,8 @@ $ipsec pki --self --in cert01.pem --dn "CN=VPN CA" --ca --outform pem > Mainroot
 Print out (echo) the certificate so you could copy its cert data to AzureP2S config
 $openssl x509 -in Mainroot.pem -outform der | base64 -w0 ; echo
 
+Copy the output data to the public certificate tab on the point-to-site configuration pane, on the Azure portal.
+
 Now, unto client certificates
 $export PASSWORD="febreeze" #you can input your own password in the quotes. 
 $export USERNAME="rexona" #you can input your own CN in the quotes. 
@@ -174,7 +176,7 @@ $sudo nano /etc/ipsec.conf
 Add the following values to /etc/ipsec.secrets:
 Open path
 $sudo nano /etc/ipsec.secrets 
-: P12 rexona.p12 ‘febreeze’ # key filename inside /etc/ipsec.d/private directory #double quotes work for the password on local PCs and single quotes on Azure VMs
+: P12 rexona.p12 "febreeze" # key filename inside /etc/ipsec.d/private directory #double quotes work for the password on local PCs and single quotes on Azure VMs
 
 Restart StrongSwan IPSec tunnel
 $sudo ipsec restart
