@@ -1,8 +1,5 @@
 I have added comments to better explain the steps.
-I found that following this document was not sufficient: Create & install P2S VPN client configuration files: certificate authentication - Azure VPN Gateway | Microsoft Docs
-
-kindly ignore if this is not new to you.
-
+I found that following this document was not sufficient even though it provided the bases: https://docs.microsoft.com/en-us/azure/vpn-gateway/point-to-site-vpn-client-configuration-azure-cert#linuxgui
 
 On Ubuntu 18.04
 
