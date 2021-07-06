@@ -35,6 +35,9 @@ $openssl pkcs12 -in "${USERNAME}Cert.pem" -inkey "${USERNAME}Key.pem" -certfile 
 
 Download the VPN client package on the P2S config page on the Azure Portal.
 
+The following instructions are for when your Linux box does not have a GUI and you are accessing the Azure Portal from a Mac or Windows PC.
+On Windows PC, you do not have to rename, I figured.
+
 Extract the file to reveal the generic folder.
 What I did was move the file to the linux box using SCP because my Linux does not have a GUI. 
 I have been accessing Azure Portal using a local PC.
